@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Novel Chapter ZIP Organizer & Renamer</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- JSZip Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Inter Font -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    /* Custom scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #18181b;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #3f3f46;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #52525b;
+    }
+  </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
+
+  <header class="border-b border-zinc-800 bg-zinc-900/80 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-bold shadow-lg shadow-indigo-500/10">
+          <i class="fa-solid fa-file-zipper text-lg"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg text-white leading-tight">Novel ZIP Organizer</h1>
+          <p class="text-xs text-zinc-400">Read First Lines • Smart Rename • Reorganize Volumes</p>
+        </div>
+      </div>
+      
+      <div id="headerActions" class="hidden flex items-center gap-3">
+        <button id="resetAppBtn" class="px-3.5 py-2 text-xs font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition border border-zinc-800 flex items-center gap-2">
+          <i class="fa-solid fa-rotate-right"></i> Reset & Start Over
+        </button>
+        <button id="exportZipBtn" class="px-4 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-lg shadow-indigo-600/25 transition flex items-center gap-2">
+          <i class="fa-solid fa-download"></i> Download Organized ZIP
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- Upload Dropzone View -->
+    <div id="uploadView" class="max-w-2xl mx-auto my-12">
+      <div id="dropZone" class="border-2 border-dashed border-zinc-800 hover:border-indigo-500/50 bg-zinc-900/50 hover:bg-zinc-900/90 rounded-2xl p-10 text-center transition cursor-pointer group shadow-2xl relative overflow-hidden">
+        <input type="file" id="zipInput" accept=".zip" class="hidden">
+        <div class="w-16 h-16 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition duration-300">
+          <i class="fa-solid fa-cloud-arrow-up text-2xl"></i>
+        </div>
+        <h3 class="text-lg font-semibold text-white mb-1">Upload Novel ZIP File</h3>
+        <p class="text-sm text-zinc-400 mb-4 max-w-sm mx-auto">
+          Drag & drop your novel <code class="text-indigo-400 font-mono bg-zinc-800 px-1.5 py-0.5 rounded">.zip</code> archive here, or click to browse.
+        </p>
+        <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-800/80 text-xs text-zinc-400 border border-zinc-700/50">
+          <i class="fa-solid fa-circle-info text-indigo-400"></i>
+          Reads 1st lines, fixes misnamed chapters & rebuilds 100-file folders
+        </div>
+      </div>
+    </div>
+
+    <!-- Processing Loading View -->
+    <div id="processingView" class="hidden max-w-md mx-auto my-20 text-center space-y-4">
+      <div class="relative w-16 h-16 mx-auto">
+        <div class="absolute inset-0 rounded-full border-4 border-zinc-800"></div>
+        <div class="absolute inset-0 rounded-full border-4 border-indigo-500 border-t-transparent animate-spin"></div>
+      </div>
+      <h3 id="processingStatus" class="text-base font-semibold text-white">Reading ZIP content...</h3>
+      <p id="processingDetail" class="text-xs text-zinc-400">Analyzing chapter headers and meta files</p>
+    </div>
+
+    <!-- Main Workspace Dashboard (Hidden initially) -->
+    <div id="workspaceView" class="hidden space-y-6">
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="bg-zinc-900/80 border border-zinc-800 p-4 rounded-xl">
+          <div class="text-xs font-medium text-zinc-400 mb-1">Total Chapters</div>
+          <div id="statTotalChapters" class="text-2xl font-bold text-white">0</div>
+        </div>
+        <div class="bg-zinc-900/80 border border-zinc-800 p-4 rounded-xl">
+          <div class="text-xs font-medium text-zinc-400 mb-1">Auto-Renamed</div>
+          <div id="statRenamedChapters" class="text-2xl font-bold text-indigo-400">0</div>
+        </div>
+        <div class="bg-zinc-900/80 border border-zinc-800 p-4 rounded-xl">
+          <div class="text-xs font-medium text-zinc-400 mb-1">Estimated Volumes</div>
+          <div id="statVolumes" class="text-2xl font-bold text-amber-400">0</div>
+        </div>
+        <div class="bg-zinc-900/80 border border-zinc-800 p-4 rounded-xl">
+          <div class="text-xs font-medium text-zinc-400 mb-1">Preserved Assets</div>
+          <div id="statAssets" class="text-2xl font-bold text-emerald-400">0</div>
+        </div>
+      </div>
+
+      <div id="preservedAssetsSection" class="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-4 hidden">
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="text-xs font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
+            <i class="fa-solid fa-paperclip text-emerald-400"></i> Preserved Non-Chapter Assets
+          </h4>
+          <span class="text-xs text-zinc-500">Will be kept in output ZIP root</span>
+        </div>
+        <div id="preservedAssetsList" class="flex flex-wrap gap-2">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <div class="bg-zinc-900/90 border border-zinc-800 rounded-xl p-4 space-y-4">
+        <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
+          <div class="relative w-full md:w-80">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-xs"></i>
+            <input type="text" id="searchInput" placeholder="Search title, filename or chapter #..." class="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500">
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+            <button id="autoSortBtn" class="px-3 py-2 text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg border border-zinc-700/50 transition flex items-center gap-2">
+              <i class="fa-solid fa-arrow-down-1-9 text-indigo-400"></i> Sort Ascending
+            </button>
+
+            <button id="reindexSequentialBtn" class="px-3 py-2 text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg border border-zinc-700/50 transition flex items-center gap-2" title="Force re-number chapters 1..N based on current list order">
+              <i class="fa-solid fa-list-ol text-amber-400"></i> Re-Index 1..N
+            </button>
+
+            <button id="deleteSelectedBtn" class="px-3 py-2 text-xs font-medium bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg border border-red-500/20 transition flex items-center gap-2">
+              <i class="fa-solid fa-trash"></i> Delete Selected (<span id="selectedCount">0</span>)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-zinc-900/90 border border-zinc-800 rounded-xl overflow-hidden shadow-xl">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-zinc-300">
+            <thead class="bg-zinc-950 text-zinc-400 border-b border-zinc-800 uppercase tracking-wider font-semibold">
+              <tr>
+                <th class="p-3 w-10 text-center">
+                  <input type="checkbox" id="selectAllCheckbox" class="rounded bg-zinc-900 border-zinc-700 text-indigo-600 focus:ring-0 focus:ring-offset-0 cursor-pointer">
+                </th>
+                <th class="py-3 px-2 w-16">Orig Name</th>
+                <th class="py-3 px-3">First Line / Title Extracted</th>
+                <th class="py-3 px-3 w-32">Ch # (Detected)</th>
+                <th class="py-3 px-3 w-40">Target Folder & Name</th>
+                <th class="py-3 px-3 w-28 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="chaptersTableBody" class="divide-y divide-zinc-800/60 font-mono">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+        
+        <div id="emptyTableState" class="hidden p-8 text-center text-zinc-500">
+          <i class="fa-solid fa-folder-open text-3xl mb-2 text-zinc-600"></i>
+          <p class="text-sm">No chapters match your query or all chapters were deleted.</p>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <div id="previewModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950">
+        <div>
+          <h3 id="previewTitle" class="font-semibold text-sm text-white">Previewing Chapter</h3>
+          <p id="previewSubtitle" class="text-xs text-zinc-400 font-mono">Original: - | Target: -</p>
+        </div>
+        <button id="closePreviewBtn" class="text-zinc-400 hover:text-white p-2 rounded-lg hover:bg-zinc-800 transition">
+          <i class="fa-solid fa-xmark text-base"></i>
+        </button>
+      </div>
+      
+      <div class="p-4 flex-1 overflow-y-auto font-mono text-xs text-zinc-300 leading-relaxed bg-zinc-950/60 whitespace-pre-wrap selection:bg-indigo-500/30" id="previewContent">
+        <!-- Content inserted dynamically -->
+      </div>
+
+      <div class="p-3 border-t border-zinc-800 bg-zinc-950 flex justify-end">
+        <button id="modalCloseActionBtn" class="px-4 py-1.5 text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition">
+          Close Preview
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let parsedChapters = [];
+    let preservedAssets = [];
+    let selectedIndices = new Set();
+    let currentPreviewIndex = null;
+
+    // DOM Elements
+    const dropZone = document.getElementById('dropZone');
+    const zipInput = document.getElementById('zipInput');
+    const uploadView = document.getElementById('uploadView');
+    const processingView = document.getElementById('processingView');
+    const workspaceView = document.getElementById('workspaceView');
+    const processingStatus = document.getElementById('processingStatus');
+    const processingDetail = document.getElementById('processingDetail');
+
+    const headerActions = document.getElementById('headerActions');
+    const resetAppBtn = document.getElementById('resetAppBtn');
+    const exportZipBtn = document.getElementById('exportZipBtn');
+
+    const statTotalChapters = document.getElementById('statTotalChapters');
+    const statRenamedChapters = document.getElementById('statRenamedChapters');
+    const statVolumes = document.getElementById('statVolumes');
+    const statAssets = document.getElementById('statAssets');
+
+    const preservedAssetsSection = document.getElementById('preservedAssetsSection');
+    const preservedAssetsList = document.getElementById('preservedAssetsList');
+
+    const searchInput = document.getElementById('searchInput');
+    const autoSortBtn = document.getElementById('autoSortBtn');
+    const reindexSequentialBtn = document.getElementById('reindexSequentialBtn');
+    const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+    const selectedCount = document.getElementById('selectedCount');
+
+    const chaptersTableBody = document.getElementById('chaptersTableBody');
+    const emptyTableState = document.getElementById('emptyTableState');
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+
+    const previewModal = document.getElementById('previewModal');
+    const previewTitle = document.getElementById('previewTitle');
+    const previewSubtitle = document.getElementById('previewSubtitle');
+    const previewContent = document.getElementById('previewContent');
+    const closePreviewBtn = document.getElementById('closePreviewBtn');
+    const modalCloseActionBtn = document.getElementById('modalCloseActionBtn');
+
+    dropZone.addEventListener('click', () => zipInput.click());
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropZone.classList.add('border-indigo-500', 'bg-zinc-900');
+      }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('border-indigo-500', 'bg-zinc-900');
+      }, false);
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      const dt = e.dataTransfer;
+      const files = dt.files;
+      if (files.length > 0 && files[0].name.endsWith('.zip')) {
+        handleZipFile(files[0]);
+      } else {
+        alert('Please upload a valid .zip file!');
+      }
+    });
+
+    zipInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        handleZipFile(e.target.files[0]);
+      }
+    });
+
+    resetAppBtn.addEventListener('click', () => {
+      if (confirm('Are you sure you want to reset and upload a new ZIP file?')) {
+        parsedChapters = [];
+        preservedAssets = [];
+        selectedIndices.clear();
+        zipInput.value = '';
+        uploadView.classList.remove('hidden');
+        workspaceView.classList.add('hidden');
+        headerActions.classList.add('hidden');
+        processingView.classList.add('hidden');
+      }
+    });
+
+    async function handleZipFile(file) {
+      uploadView.classList.add('hidden');
+      processingView.classList.remove('hidden');
+      processingStatus.textContent = "Loading ZIP Archive...";
+      
+      try {
+        const zip = new JSZip();
+        const loadedZip = await zip.loadAsync(file);
+        
+        parsedChapters = [];
+        preservedAssets = [];
+        selectedIndices.clear();
+
+        const fileEntries = Object.keys(loadedZip.files);
+        let processedCount = 0;
+
+        for (const filename of fileEntries) {
+          const zipEntry = loadedZip.files[filename];
+          if (zipEntry.dir) continue;
+
+          // Strip directory path to inspect filename
+          const cleanFileName = filename.split('/').pop();
+          if (!cleanFileName || cleanFileName.startsWith('.')) continue;
+
+          processingDetail.textContent = `Processing (${processedCount + 1}/${fileEntries.length}): ${cleanFileName}`;
+
+          // Check if file is a txt chapter file or a non-chapter asset (meta.txt, cover.jpg, etc)
+          const lowerName = cleanFileName.toLowerCase();
+          
+          if (lowerName === 'meta.txt' || lowerName.endsWith('.jpg') || lowerName.endsWith('.png') || lowerName.endsWith('.jpeg')) {
+            // Asset file preserved as binary / string
+            if (lowerName.endsWith('.txt')) {
+              const textContent = await zipEntry.async('string');
+              preservedAssets.push({ name: cleanFileName, content: textContent, isText: true });
+            } else {
+              const blobContent = await zipEntry.async('uint8array');
+              preservedAssets.push({ name: cleanFileName, content: blobContent, isText: false });
+            }
+          } else {
+            // Text Chapter file
+            const textContent = await zipEntry.async('string');
+            const info = extractChapterHeader(textContent, cleanFileName);
+
+            parsedChapters.push({
+              id: Math.random().toString(36).substring(2, 9),
+              originalPath: filename,
+              originalName: cleanFileName,
+              firstLine: info.firstLine,
+              chapterNum: info.chapterNum,
+              originalNum: info.originalNum,
+              content: textContent
+            });
+          }
+          processedCount++;
+        }
+
+        // Sort initial list by detected chapter number
+        sortChaptersAscending();
+
+        // Render Dashboard UI
+        renderWorkspace();
+
+      } catch (err) {
+        console.error(err);
+        alert('Error parsing ZIP file. Make sure it is a valid ZIP archive.');
+        uploadView.classList.remove('hidden');
+        processingView.classList.add('hidden');
+      }
+    }
+
+    function extractChapterHeader(text, originalFilename) {
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+      const firstLine = lines.length > 0 ? lines[0] : '';
+
+      // Extract original filename numeric value
+      const fnNumMatch = originalFilename.match(/(\d+)/);
+      const originalNum = fnNumMatch ? parseInt(fnNumMatch[1], 10) : 0;
+
+      let chapterNum = null;
+
+      // Pattern 1: Look for "Chapter 222", "Ch 222", "第222章", etc in first line
+      let match = firstLine.match(/(?:chapter|ch|第)\s*\.?\s*(\d+)/i);
+      if (match) {
+        chapterNum = parseInt(match[1], 10);
+      }
+
+      // Pattern 2: Line starts with digits e.g. "222 Must Be Called Nanjing"
+      if (!chapterNum) {
+        match = firstLine.match(/^(\d{1,6})\b/);
+        if (match) {
+          chapterNum = parseInt(match[1], 10);
+        }
+      }
+
+      // Pattern 3: Any sequence of digits in first line
+      if (!chapterNum) {
+        match = firstLine.match(/\b(\d{1,6})\b/);
+        if (match) {
+          chapterNum = parseInt(match[1], 10);
+        }
+      }
+
+      // Fallback: use filename number if content extraction fails
+      if (!chapterNum) {
+        chapterNum = originalNum > 0 ? originalNum : 1;
+      }
+
+      return {
+        firstLine: firstLine || '(Empty File)',
+        chapterNum: chapterNum,
+        originalNum: originalNum
+      };
+    }
+
+    function getTargetFolderAndFilename(chapterNum, originalFilename) {
+      // Folders contain 100 chapters each:
+      // Folder 001 -> Chapters 1 to 100
+      // Folder 002 -> Chapters 101 to 200
+      // Folder 005 -> Chapters 401 to 500
+      const folderIndex = Math.ceil(chapterNum / 100) || 1;
+      const folderName = String(folderIndex).padStart(3, '0');
+
+      // 5-digit filename e.g. 00222
+      const formattedChapterNum = String(chapterNum).padStart(5, '0');
+      
+      const hasTxtExt = originalFilename.toLowerCase().endsWith('.txt');
+      const filename = hasTxtExt ? `${formattedChapterNum}.txt` : formattedChapterNum;
+
+      return {
+        folderName,
+        filename,
+        fullPath: `${folderName}/${filename}`
+      };
+    }
+
+    function sortChaptersAscending() {
+      parsedChapters.sort((a, b) => a.chapterNum - b.chapterNum);
+    }
+
+    autoSortBtn.addEventListener('click', () => {
+      sortChaptersAscending();
+      renderTable();
+    });
+
+    reindexSequentialBtn.addEventListener('click', () => {
+      if (confirm('Re-index all chapters sequentially (1, 2, 3...) based on current order?')) {
+        parsedChapters.forEach((ch, idx) => {
+          ch.chapterNum = idx + 1;
+        });
+        renderTable();
+      }
+    });
+
+    function renderWorkspace() {
+      processingView.classList.add('hidden');
+      workspaceView.classList.remove('hidden');
+      headerActions.classList.remove('hidden');
+
+      // Render Asset Chips
+      if (preservedAssets.length > 0) {
+        preservedAssetsSection.classList.remove('hidden');
+        preservedAssetsList.innerHTML = preservedAssets.map(a => `
+          <div class="px-2.5 py-1 rounded-md bg-zinc-800 text-xs text-zinc-300 font-mono border border-zinc-700/50 flex items-center gap-1.5">
+            <i class="fa-solid ${a.name.endsWith('.txt') ? 'fa-file-lines text-amber-400' : 'fa-file-image text-blue-400'}"></i>
+            ${a.name}
+          </div>
+        `).join('');
+      } else {
+        preservedAssetsSection.classList.add('hidden');
+      }
+
+      renderTable();
+    }
+
+    function renderTable() {
+      // Calculate Stats
+      const total = parsedChapters.length;
+      let renamedCount = 0;
+      let maxChapterNum = 0;
+
+      parsedChapters.forEach(ch => {
+        if (ch.originalNum !== ch.chapterNum) renamedCount++;
+        if (ch.chapterNum > maxChapterNum) maxChapterNum = ch.chapterNum;
+      });
+
+      const totalVolumes = Math.ceil(maxChapterNum / 100) || 0;
+
+      statTotalChapters.textContent = total;
+      statRenamedChapters.textContent = renamedCount;
+      statVolumes.textContent = totalVolumes;
+      statAssets.textContent = preservedAssets.length;
+
+      // Filter
+      const query = searchInput.value.toLowerCase().trim();
+      const filtered = parsedChapters.filter(ch => {
+        if (!query) return true;
+        const target = getTargetFolderAndFilename(ch.chapterNum, ch.originalName);
+        return ch.originalName.toLowerCase().includes(query) ||
+               ch.firstLine.toLowerCase().includes(query) ||
+               String(ch.chapterNum).includes(query) ||
+               target.fullPath.toLowerCase().includes(query);
+      });
+
+      chaptersTableBody.innerHTML = '';
+      selectedCount.textContent = selectedIndices.size;
+
+      if (filtered.length === 0) {
+        emptyTableState.classList.remove('hidden');
+        return;
+      } else {
+        emptyTableState.classList.add('hidden');
+      }
+
+      filtered.forEach((ch, visibleIdx) => {
+        const realIdx = parsedChapters.indexOf(ch);
+        const target = getTargetFolderAndFilename(ch.chapterNum, ch.originalName);
+        const isRenamed = ch.originalNum !== ch.chapterNum;
+
+        const tr = document.createElement('tr');
+        tr.className = `hover:bg-zinc-800/40 transition border-b border-zinc-800/50 ${selectedIndices.has(ch.id) ? 'bg-indigo-950/20' : ''}`;
+
+        tr.innerHTML = `
+          <td class="p-3 text-center">
+            <input type="checkbox" data-id="${ch.id}" class="rowCheckbox rounded bg-zinc-900 border-zinc-700 text-indigo-600 focus:ring-0 focus:ring-offset-0 cursor-pointer" ${selectedIndices.has(ch.id) ? 'checked' : ''}>
+          </td>
+          <td class="py-3 px-2 text-zinc-400 font-mono text-[11px] truncate max-w-[100px]" title="${ch.originalName}">${ch.originalName}</td>
+          <td class="py-3 px-3 font-sans text-xs text-zinc-200">
+            <div class="line-clamp-1 max-w-md font-medium" title="${ch.firstLine}">${ch.firstLine}</div>
+          </td>
+          <td class="py-3 px-3">
+            <div class="flex items-center gap-1.5">
+              <input type="number" value="${ch.chapterNum}" min="1" data-id="${ch.id}" class="chapterNumInput w-20 bg-zinc-950 border ${isRenamed ? 'border-amber-500/50 text-amber-300' : 'border-zinc-800 text-zinc-200'} rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 font-mono">
+              ${isRenamed ? '<span class="text-[10px] text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded font-sans" title="Chapter number re-assigned based on content">Fixed</span>' : ''}
+            </div>
+          </td>
+          <td class="py-3 px-3 font-mono text-xs">
+            <span class="text-indigo-400 font-semibold">${target.folderName}/</span><span class="text-emerald-400">${target.filename}</span>
+          </td>
+          <td class="py-3 px-3 text-right">
+            <div class="flex items-center justify-end gap-1">
+              <button data-id="${ch.id}" class="previewBtn p-1.5 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded transition" title="Preview Chapter Content">
+                <i class="fa-solid fa-eye"></i>
+              </button>
+              <button data-id="${ch.id}" class="deleteBtn p-1.5 hover:bg-red-500/20 text-zinc-400 hover:text-red-400 rounded transition" title="Delete Chapter">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </div>
+          </td>
+        `;
+
+        chaptersTableBody.appendChild(tr);
+      });
+
+      attachRowEventListeners();
+    }
+
+    function attachRowEventListeners() {
+      // Row checkboxes
+      document.querySelectorAll('.rowCheckbox').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+          const id = e.target.getAttribute('data-id');
+          if (e.target.checked) {
+            selectedIndices.add(id);
+          } else {
+            selectedIndices.delete(id);
+          }
+          selectedCount.textContent = selectedIndices.size;
+        });
+      });
+
+      // Chapter Number Manual Input Changes
+      document.querySelectorAll('.chapterNumInput').forEach(input => {
+        input.addEventListener('change', (e) => {
+          const id = e.target.getAttribute('data-id');
+          const val = parseInt(e.target.value, 10) || 1;
+          const chapter = parsedChapters.find(c => c.id === id);
+          if (chapter) {
+            chapter.chapterNum = val;
+            renderTable();
+          }
+        });
+      });
+
+      // Preview button click
+      document.querySelectorAll('.previewBtn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const id = e.currentTarget.getAttribute('data-id');
+          openPreviewModal(id);
+        });
+      });
+
+      // Delete single file click
+      document.querySelectorAll('.deleteBtn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const id = e.currentTarget.getAttribute('data-id');
+          parsedChapters = parsedChapters.filter(c => c.id !== id);
+          selectedIndices.delete(id);
+          renderTable();
+        });
+      });
+    }
+
+    // Select All Checkbox
+    selectAllCheckbox.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        parsedChapters.forEach(c => selectedIndices.add(c.id));
+      } else {
+        selectedIndices.clear();
+      }
+      renderTable();
+    });
+
+    // Search input event
+    searchInput.addEventListener('input', () => {
+      renderTable();
+    });
+
+    // Delete selected chapters
+    deleteSelectedBtn.addEventListener('click', () => {
+      if (selectedIndices.size === 0) {
+        alert('No chapters selected.');
+        return;
+      }
+      if (confirm(`Delete ${selectedIndices.size} selected chapter file(s)?`)) {
+        parsedChapters = parsedChapters.filter(c => !selectedIndices.has(c.id));
+        selectedIndices.clear();
+        selectAllCheckbox.checked = false;
+        renderTable();
+      }
+    });
+
+    function openPreviewModal(id) {
+      const chapter = parsedChapters.find(c => c.id === id);
+      if (!chapter) return;
+
+      const target = getTargetFolderAndFilename(chapter.chapterNum, chapter.originalName);
+      previewTitle.textContent = `Chapter ${chapter.chapterNum}: ${chapter.firstLine}`;
+      previewSubtitle.textContent = `Original: ${chapter.originalName}  →  Output Target: ${target.fullPath}`;
+      previewContent.textContent = chapter.content;
+
+      previewModal.classList.remove('hidden');
+    }
+
+    closePreviewBtn.addEventListener('click', () => previewModal.classList.add('hidden'));
+    modalCloseActionBtn.addEventListener('click', () => previewModal.classList.add('hidden'));
+
+    exportZipBtn.addEventListener('click', async () => {
+      if (parsedChapters.length === 0) {
+        alert('No chapters to export!');
+        return;
+      }
+
+      exportZipBtn.disabled = true;
+      exportZipBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Packaging ZIP...`;
+
+      try {
+        const outZip = new JSZip();
+
+        // 1. Include Preserved Asset Files (meta.txt, cover.jpg, etc)
+        preservedAssets.forEach(asset => {
+          outZip.file(asset.name, asset.content);
+        });
+
+        // 2. Ensure sorted ascending order
+        sortChaptersAscending();
+
+        // 3. Add organized chapter files into volume folders (001, 002, 005...)
+        parsedChapters.forEach(ch => {
+          const target = getTargetFolderAndFilename(ch.chapterNum, ch.originalName);
+          outZip.folder(target.folderName).file(target.filename, ch.content);
+        });
+
+        // 4. Generate ZIP blob
+        const blob = await outZip.generateAsync({ type: 'blob' });
+        
+        // 5. Trigger download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `organized_novel_chapters.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+      } catch (err) {
+        console.error(err);
+        alert('Error generating ZIP output.');
+      } finally {
+        exportZipBtn.disabled = false;
+        exportZipBtn.innerHTML = `<i class="fa-solid fa-download"></i> Download Organized ZIP`;
+      }
+    });
+  </script>
+</body>
+</html>
